@@ -13,9 +13,10 @@
 pro BUDDI_prep,input_file,COUNTS=counts,LOG_REBIN=log_rebin,MANGA=manga,MUSE=muse,JY=jy,BADPIX=badpix
 ;buddi_prep,'BUDDI_input.txt',/MANGA,/JY,/BADPIX
 ;buddi_prep,'BUDDI_input2_r2.txt',/LOG_REBIN,/JY,/MUSE
-;buddi_prep,'BUDDI_input.txt',/LOG_REBIN,/JY,/MUSE
+;buddi_prep,'BUDDI_input_prep.txt',/LOG_REBIN,/JY,/MUSE,/BADPIX
 
 same_dir='n'  ;yes or no- is the original file int he same directory?
+file_temp='/home/bhaeussl/MUSE_data/2MIG_131_DATACUBE_CLEANED.fits'
 
 read_input, input_file, setup
 
@@ -36,7 +37,7 @@ stellib_dir=setup.stellib_dir
 directory=root
 
 if same_dir eq 'y' then fits_read,directory+file+'.fits',input,h
-if same_dir eq 'n' then fits_read,'/home/bhaeussl/MUSE_data/2MIG_131_DATACUBE_CLEANED.fits',input,h
+if same_dir eq 'n' then fits_read,file_temp,input,h
 
 ;h = headfits(directory+file+'.fits')
 ;h2 = headfits(directory+file+'.fits',exten=1)
@@ -112,7 +113,9 @@ endif else output=input_counts
 
 fits_write,directory+file+'_FLUX.fits',output,extname='FLUX'
 
-temp=mrdfits(directory+file+'.fits',0,h_temp)
+if same_dir eq 'y' then temp=mrdfits(directory+file+'.fits',0,h_temp)
+if same_dir eq 'n' then h_temp=headfits(file_temp,exten=0)
+
 if keyword_set(Jy) and keyword_set(MaNGA) then sxaddpar,h_temp,'BUNIT','Jy', 'Specific intensity (per spaxel)'
 sxaddpar,h_temp,'CD1_1',sxpar(h,'CD1_1')
 sxaddpar,h_temp,'CD2_2',sxpar(h,'CD2_2')
@@ -130,7 +133,7 @@ if keyword_set(MANGA) then begin
   
 
   if same_dir eq 'y' then fits_read,directory+file+'.fits',input,h2,exten_no=2
-  if same_dir eq 'n' then fits_read,'/home/bhaeussl/MUSE_data/2MIG_131_DATACUBE_CLEANED.fits',input,h2,exten_no=2
+  if same_dir eq 'n' then fits_read,file_temp,input,h2,exten_no=2
   if keyword_set(Jy) then begin
     ;for zz=0,z-1,1 do sigma[*,*,zz]=((sigma[*,*,zz]*1e-17)*wave[zz]*wave[zz]/(3.e5))/1e-23
       for zz=0,z-1,1 do sigma[*,*,zz]=(sigma[*,*,zz]*1e-17)*wave[zz]*wave[zz]*3.34e4
@@ -139,24 +142,37 @@ if keyword_set(MANGA) then begin
   fits_write,directory+file+'_SIGMA.fits',sigma,extname='SIGMA'
   sxaddpar,h2,'EXTNAME','SIGMA'
 
-  temp=mrdfits(directory+file+'.fits',0,h_temp)
+  if same_dir eq 'y' then temp=mrdfits(directory+file+'.fits',0,h_temp)
+  if same_dir eq 'n' then h_temp=headfits(file_temp,exten=0)
+  
   if keyword_set(Jy) then sxaddpar,h_temp,'BUNIT','Jy', 'Specific intensity (per spaxel)'
   modfits,directory+file+'_SIGMA.fits',0,h_temp
   modfits,directory+file+'_SIGMA.fits',1,h2,extname='SIGMA'
 endif
 
 
+
+
+
+
+;==================================
+;sigma datacube
+
+
+
 if keyword_set(MUSE) then begin
   ;extract IVAR datacube and convert to sigma images
   ;for MUSE data, the STAT extension shows sigma^2
-  IVAR=MRDFITS(directory+file+'.fits', 2, hdr2)
+  
+  if same_dir eq 'y' then IVAR=MRDFITS(directory+file+'.fits', 2, hdr2)
+  if same_dir eq 'n' then IVAR=MRDFITS(file_temp, 2, hdr2)
   s=size(IVAR)
   sigma=fltarr(s[1],s[2],s[3])
   sigma[*,*,*]=sqrt(IVAR[*,*,*])
   
   
   if same_dir eq 'y' then fits_read,directory+file+'.fits',input,h2,exten_no=2
-  if same_dir eq 'n' then fits_read,'/home/bhaeussl/MUSE_data/2MIG_131_DATACUBE_CLEANED.fits',input,h2,exten_no=2
+  if same_dir eq 'n' then fits_read,file_temp,input,h2,exten_no=2
   if keyword_set(Jy) then begin
     ;for zz=0,z-1,1 do sigma[*,*,zz]=((sigma[*,*,zz]*1e-17)*wave[zz]*wave[zz]/(3.e5))/1e-23
     for zz=0,z-1,1 do sigma[*,*,zz]=(sigma[*,*,zz]*1e-20)*wavelength[zz]*wavelength[zz]*3.34e4
@@ -165,12 +181,22 @@ if keyword_set(MUSE) then begin
   fits_write,directory+file+'_SIGMA.fits',sigma,extname='SIGMA'
   sxaddpar,h2,'EXTNAME','SIGMA'
   
-  temp=mrdfits(directory+file+'.fits',0,h_temp)
+  if same_dir eq 'y' then temp=mrdfits(directory+file+'.fits',0,h_temp)
+  if same_dir eq 'n' then h_temp=headfits(file_temp,exten=0)
+  
   if keyword_set(Jy) then sxaddpar,h_temp,'BUNIT','Jy', 'Specific intensity (per spaxel)'
   modfits,directory+file+'_SIGMA.fits',0,h_temp
   modfits,directory+file+'_SIGMA.fits',1,h2,extname='SIGMA'
 endif
 
+
+
+
+
+
+
+;==================================
+;bad pixel datacube
 
 
 
