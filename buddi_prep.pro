@@ -15,6 +15,7 @@ pro BUDDI_prep,input_file,COUNTS=counts,LOG_REBIN=log_rebin,MANGA=manga,MUSE=mus
 ;buddi_prep,'BUDDI_input2_r2.txt',/LOG_REBIN,/JY,/MUSE
 ;buddi_prep,'BUDDI_input.txt',/LOG_REBIN,/JY,/MUSE
 
+same_dir='n'  ;yes or no- is the original file int he same directory?
 
 read_input, input_file, setup
 
@@ -34,8 +35,8 @@ stellib_dir=setup.stellib_dir
 
 directory=root
 
-;fits_read,directory+file+'.fits',input,h
-fits_read,'/home/bhaeussl/MUSE_data/2MIG_131_DATACUBE_CLEANED.fits',input,h
+if same_dir eq 'y' then fits_read,directory+file+'.fits',input,h
+if same_dir eq 'n' then fits_read,'/home/bhaeussl/MUSE_data/2MIG_131_DATACUBE_CLEANED.fits',input,h
 
 ;h = headfits(directory+file+'.fits')
 ;h2 = headfits(directory+file+'.fits',exten=1)
@@ -100,7 +101,8 @@ if keyword_set(LOG_REBIN) then begin
       temp_spec=fltarr(z)
       temp_spec[*]=input_counts[column,row,*]
       log10_rebin, lamRange2, temp_spec, new_spec, logLam2, VELSCALE=velScale
-      output[column,row,*]=new_spec
+      zz=n_elements(new_spec)-1
+      output[column,row,0:zz]=new_spec
     endfor
   endfor
   sxaddpar,h,'CRVAL3',logLam2[0]
@@ -127,8 +129,8 @@ if keyword_set(MANGA) then begin
   sigma[*,*,*]=1/sqrt(IVAR[*,*,*])
   
 
-  ;fits_read,directory+file+'.fits',input,h2,exten_no=2
-  fits_read,'/home/bhaeussl/MUSE_data/2MIG_131_DATACUBE_CLEANED.fits',input,h2,exten_no=2
+  if same_dir eq 'y' then fits_read,directory+file+'.fits',input,h2,exten_no=2
+  if same_dir eq 'n' then fits_read,'/home/bhaeussl/MUSE_data/2MIG_131_DATACUBE_CLEANED.fits',input,h2,exten_no=2
   if keyword_set(Jy) then begin
     ;for zz=0,z-1,1 do sigma[*,*,zz]=((sigma[*,*,zz]*1e-17)*wave[zz]*wave[zz]/(3.e5))/1e-23
       for zz=0,z-1,1 do sigma[*,*,zz]=(sigma[*,*,zz]*1e-17)*wave[zz]*wave[zz]*3.34e4
@@ -153,8 +155,8 @@ if keyword_set(MUSE) then begin
   sigma[*,*,*]=sqrt(IVAR[*,*,*])
   
   
-;  fits_read,directory+file+'.fits',input,h2,exten_no=2
-  fits_read,'/home/bhaeussl/MUSE_data/2MIG_131_DATACUBE_CLEANED.fits',input,h2,exten_no=2
+  if same_dir eq 'y' then fits_read,directory+file+'.fits',input,h2,exten_no=2
+  if same_dir eq 'n' then fits_read,'/home/bhaeussl/MUSE_data/2MIG_131_DATACUBE_CLEANED.fits',input,h2,exten_no=2
   if keyword_set(Jy) then begin
     ;for zz=0,z-1,1 do sigma[*,*,zz]=((sigma[*,*,zz]*1e-17)*wave[zz]*wave[zz]/(3.e5))/1e-23
     for zz=0,z-1,1 do sigma[*,*,zz]=(sigma[*,*,zz]*1e-20)*wavelength[zz]*wavelength[zz]*3.34e4
@@ -200,7 +202,7 @@ if keyword_set(BADPIX) then begin
     fits_write,directory+file+'_BADPIX.fits',badpix,extname='BADPIX'
     modfits,directory+file+'_BADPIX.fits',0,h_temp
     modfits,directory+file+'_BADPIX.fits',0,h,extname='BADPIX'
-  endif
+  endelse
 endif
 
 
