@@ -53,10 +53,10 @@ ugriz_wave=[3543,4770,6231,7635,9134]
 ;to determine the fraction of light from each filter and coadd them in the 
 ;correct proportions.
 ;
-readcol,'/Users/ejohnsto/Manga/g.dat',format='F,X,F,X,X',wave_g,transmission_g,/SILENT
-readcol,'/Users/ejohnsto/Manga/r.dat',format='F,X,F,X,X',wave_r,transmission_r,/SILENT
-readcol,'/Users/ejohnsto/Manga/i.dat',format='F,X,F,X,X',wave_i,transmission_i,/SILENT
-readcol,'/Users/ejohnsto/Manga/z.dat',format='F,X,F,X,X',wave_z,transmission_z,/SILENT
+readcol,'/home/ejohnsto/Manga/g.dat',format='F,X,F,X,X',wave_g,transmission_g,/SILENT
+readcol,'/home/ejohnsto/Manga/r.dat',format='F,X,F,X,X',wave_r,transmission_r,/SILENT
+readcol,'/home/ejohnsto/Manga/i.dat',format='F,X,F,X,X',wave_i,transmission_i,/SILENT
+readcol,'/home/ejohnsto/Manga/z.dat',format='F,X,F,X,X',wave_z,transmission_z,/SILENT
 
 wavelength0_lin=sxpar(h2,'CRVAL3')
 wavelength0=alog10(wavelength0_lin)
@@ -196,6 +196,6 @@ for n=0,sxpar(h,'NAXIS3')-1 do begin
   if total(total(psf_out[*,*,n])) gt 0 then psf_out[*,*,n]=psf_out[*,*,n]/total(psf_out[*,*,n])
 endfor
 fits_write,directory+'psf.fits', psf_out, h
-stop
+
 
 end

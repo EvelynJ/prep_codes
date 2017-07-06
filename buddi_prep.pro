@@ -7,50 +7,14 @@
 
 ;===============================================================
 
-FUNCTION cts2maggies, cts, expt, zp
-;zp: zeropoint is a positive number
-   return, cts / expt * 10^(-0.4*zp)
-END
-FUNCTION maggies2fnu, maggies
-   return, 3631e-23*maggies     ;[erg s-1 Hz-1 cm-2]
-END
-FUNCTION fnu2flam, fnu, lam     ;[erg s-1 Hz-1 cm-2], [angstroem]
-   return, 299792458.*1e10/lam^2.*fnu ;[erg s-1 cm-2 A-1]
-END
-
-
-FUNCTION flam2fnu, flam, lam    ;[erg s-1 cm-2 A-1], [angstroem]
-   return, flam/299792458./1e10*lam^2. ;[erg s-1 Hz-1 cm-2]
-END
-FUNCTION fnu2maggies, fnu
-   return, 3631e23*fnu
-END
-FUNCTION maggies2cts, maggies, expt, zp
-;zp: zeropoint is a positive number
-   return, maggies * expt / 10^(-0.4*zp)
-END
-
-
-FUNCTION mags2cts, mags, expt, zp
-;zp: zeropoint is a positive number
-   return, maggies2cts(mags2maggies(mags), expt, zp)
-END
-FUNCTION mags2maggies, mags
-   return, 10^(-0.4*mags)
-END
-
-
-FUNCTION cts2mags, cts, expt, zp
-;zp: zeropoint is a positive number
-   return, maggies2mags(cts2maggies(cts, expt, zp))
-END
-FUNCTION maggies2mags, maggies
-   return, -2.5*alog10(maggies)
-END
 
 ;===============================================================
 
-pro BUDDI_prep,input_file,COUNTS=counts,LOG_REBIN=log_rebin,MANGA=manga
+pro BUDDI_prep,input_file,COUNTS=counts,LOG_REBIN=log_rebin,MANGA=manga,MUSE=muse,JY=jy,BADPIX=badpix
+;buddi_prep,'BUDDI_input.txt',/MANGA,/JY,/BADPIX
+;buddi_prep,'BUDDI_input2_r2.txt',/LOG_REBIN,/JY,/MUSE
+;buddi_prep,'BUDDI_input.txt',/LOG_REBIN,/JY,/MUSE
+
 
 read_input, input_file, setup
 
@@ -70,34 +34,34 @@ stellib_dir=setup.stellib_dir
 
 directory=root
 
-fits_read,directory+file+'.fits',input,h
-h = headfits(directory+file+'.fits')
-h2 = headfits(directory+file+'.fits',exten=1)
-x=sxpar(h2,'NAXIS1')
-y=sxpar(h2,'NAXIS2')
-z=sxpar(h2,'NAXIS3')
+;fits_read,directory+file+'.fits',input,h
+fits_read,'/home/bhaeussl/MUSE_data/2MIG_131_DATACUBE_CLEANED.fits',input,h
+
+;h = headfits(directory+file+'.fits')
+;h2 = headfits(directory+file+'.fits',exten=1)
+x=sxpar(h,'NAXIS1')
+y=sxpar(h,'NAXIS2')
+z=sxpar(h,'NAXIS3')
 
 
 ;write out wavelength array
 if keyword_set(MANGA) then begin
-    wavelength0_lin=sxpar(h2,'CRVAL3')
-    wavelength0=alog10(wavelength0_lin)
-    step_lin=sxpar(h2,'CD3_3')
-    step=alog10(wavelength0_lin+step_lin)-wavelength0
-    wavelength=fltarr(sxpar(h2,'NAXIS3'))
-    for m=0,sxpar(h2,'NAXIS3')-1,1 do wavelength[m]=wavelength0+(m*step)
-    wave=10^wavelength
-  
-    sxaddpar,h2,'CRVAL3',wavelength[0]
-    sxaddpar,h2,'CDELT3',wavelength[1]-wavelength[0]
-    sxaddpar,h2,'CD3_3',wavelength[1]-wavelength[0]
+    newfile = directory+file+'.fits'
+    wave = MRDFITS(newfile, 4, hdr4)    ; wavelength in Angstrom
+    wavelength=alog10(wave)
+        
     
+    sxaddpar,h,'CRVAL3',wavelength[0]
+    sxaddpar,h,'CDELT3',wavelength[1]-wavelength[0]
+    sxaddpar,h,'CD3_3',wavelength[1]-wavelength[0]
+    
+
 endif else begin
-    wavelength0=sxpar(h2,'CRVAL3')
-    step=sxpar(h2,'CD3_3')
-    wavelength=fltarr(sxpar(h2,'NAXIS3'))
-    for m=0,sxpar(h2,'NAXIS3')-1,1 do wavelength[m]=wavelength0+(m*step)
-  
+    wavelength0=sxpar(h,'CRVAL3')
+    step=sxpar(h,'CD3_3')
+    wavelength=fltarr(sxpar(h,'NAXIS3'))
+    for m=0,sxpar(h,'NAXIS3')-1,1 do wavelength[m]=wavelength0+(m*step)
+    
 endelse
 
 
@@ -107,44 +71,30 @@ endelse
 
 
 input_counts=fltarr(x,y,z)
-if keyword_set(COUNTS) then begin
-  exptime=sxpar(h,'exptime')/sxpar(h,'nexp')
-  wave_bands=[3543,4770,6231,7625,9134]
-  zp_bands=[23.2680,24.2500,23.9270,23.6130,21.8650]
+if keyword_set(Jy) then begin
+  print,'*** Now converting units to Jy'
   
-  zp_temp=linear_interpolate(wave,wave_bands,zp_bands)
-  
-;  zp=fltarr(z)
-;  
-;  result=poly_fit(wave_bands,zp_bands,2)
-;  for j=0,z-1,1 do zp[j]=result[0]+result[1]*(wave[j])+result[2]*(wave[j])^2
-  zp=linear_interpolate(wavelength,wave_bands,zp_bands)
-;    
-  
-  ;now use corrected zeropoints to convert flux to counts in the datacube
-  datacube=fltarr(x,y,z)
-  IFU_fnu=fltarr(x,y,z)
-  IFU_maggies=fltarr(x,y,z)
-  IFU_mags=fltarr(x,y,z)
-  for column=0,x-1,1 do begin
-    for row=0,y-1,1 do begin
-      spec_xy=input[column,row,*]*1e-17
-      IFU_fnu[column,row,*]=flam2fnu(spec_xy,(wavelength))
-      IFU_maggies[column,row,*]=fnu2maggies(IFU_fnu[column,row,*])
-      datacube[column,row,*]=maggies2cts(IFU_maggies[column,row,*],exptime,zp)
-        
-
-      
-    endfor
+  for zz=0,z-1,1 do begin
+    ;convert from 10^-17 erg/s/cm2/AA to Jy
+;    input_counts[*,*,zz]=((input[*,*,zz]*1e-17)*wave[zz]*wave[zz]/(3.e5))/1e-23
+    if keyword_set(MANGA) then input_counts[*,*,zz]=(input[*,*,zz]*1e-17)*wave[zz]*wave[zz]*3.34e4
+    if keyword_set(MUSE) then input_counts[*,*,zz]=(input[*,*,zz]*1e-20)*wavelength[zz]*wavelength[zz]*3.34e4
   endfor
-  
-  input_counts=datacube
+  sxaddpar,h,'BUNIT','Jy', 'Specific intensity (per spaxel)'
+
 endif else input_counts=input
+
+
+
+
+
 
 
 output=fltarr(x,y,z)
 if keyword_set(LOG_REBIN) then begin
+  print,'*** Now rebinning logarithmically'
   lamRange2=[wavelength[0],wavelength[-1]]
+  
   for column=0,x-1,1 do begin
     for row=0,y-1,1 do begin
       temp_spec=fltarr(z)
@@ -153,20 +103,118 @@ if keyword_set(LOG_REBIN) then begin
       output[column,row,*]=new_spec
     endfor
   endfor
-  sxaddpar,h2,'CRVAL3',logLam2[0]
-  sxaddpar,h2,'CDELT3',logLam2[1]-logLam2[0]
-  sxaddpar,h2,'CD3_3',logLam2[1]-logLam2[0]
+  sxaddpar,h,'CRVAL3',logLam2[0]
+  sxaddpar,h,'CDELT3',logLam2[1]-logLam2[0]
+  sxaddpar,h,'CD3_3',logLam2[1]-logLam2[0]
 endif else output=input_counts
 
-fits_write,directory+file+'_counts.fits',output,h2
+fits_write,directory+file+'_FLUX.fits',output,extname='FLUX'
+
+temp=mrdfits(directory+file+'.fits',0,h_temp)
+if keyword_set(Jy) and keyword_set(MaNGA) then sxaddpar,h_temp,'BUNIT','Jy', 'Specific intensity (per spaxel)'
+sxaddpar,h_temp,'CD1_1',sxpar(h,'CD1_1')
+sxaddpar,h_temp,'CD2_2',sxpar(h,'CD2_2')
+
+modfits,directory+file+'_FLUX.fits',0,h_temp
+modfits,directory+file+'_FLUX.fits',0,h,extname='FLUX'
+
+
+if keyword_set(MANGA) then begin
+  ;extract IVAR datacube and convert to sigma images
+  IVAR=MRDFITS(directory+file+'.fits', 2, hdr2)
+  s=size(IVAR)
+  sigma=fltarr(s[1],s[2],s[3])
+  sigma[*,*,*]=1/sqrt(IVAR[*,*,*])
+  
+
+  ;fits_read,directory+file+'.fits',input,h2,exten_no=2
+  fits_read,'/home/bhaeussl/MUSE_data/2MIG_131_DATACUBE_CLEANED.fits',input,h2,exten_no=2
+  if keyword_set(Jy) then begin
+    ;for zz=0,z-1,1 do sigma[*,*,zz]=((sigma[*,*,zz]*1e-17)*wave[zz]*wave[zz]/(3.e5))/1e-23
+      for zz=0,z-1,1 do sigma[*,*,zz]=(sigma[*,*,zz]*1e-17)*wave[zz]*wave[zz]*3.34e4
+
+  endif
+  fits_write,directory+file+'_SIGMA.fits',sigma,extname='SIGMA'
+  sxaddpar,h2,'EXTNAME','SIGMA'
+
+  temp=mrdfits(directory+file+'.fits',0,h_temp)
+  if keyword_set(Jy) then sxaddpar,h_temp,'BUNIT','Jy', 'Specific intensity (per spaxel)'
+  modfits,directory+file+'_SIGMA.fits',0,h_temp
+  modfits,directory+file+'_SIGMA.fits',1,h2,extname='SIGMA'
+endif
+
+
+if keyword_set(MUSE) then begin
+  ;extract IVAR datacube and convert to sigma images
+  ;for MUSE data, the STAT extension shows sigma^2
+  IVAR=MRDFITS(directory+file+'.fits', 2, hdr2)
+  s=size(IVAR)
+  sigma=fltarr(s[1],s[2],s[3])
+  sigma[*,*,*]=sqrt(IVAR[*,*,*])
+  
+  
+;  fits_read,directory+file+'.fits',input,h2,exten_no=2
+  fits_read,'/home/bhaeussl/MUSE_data/2MIG_131_DATACUBE_CLEANED.fits',input,h2,exten_no=2
+  if keyword_set(Jy) then begin
+    ;for zz=0,z-1,1 do sigma[*,*,zz]=((sigma[*,*,zz]*1e-17)*wave[zz]*wave[zz]/(3.e5))/1e-23
+    for zz=0,z-1,1 do sigma[*,*,zz]=(sigma[*,*,zz]*1e-20)*wavelength[zz]*wavelength[zz]*3.34e4
+    
+  endif
+  fits_write,directory+file+'_SIGMA.fits',sigma,extname='SIGMA'
+  sxaddpar,h2,'EXTNAME','SIGMA'
+  
+  temp=mrdfits(directory+file+'.fits',0,h_temp)
+  if keyword_set(Jy) then sxaddpar,h_temp,'BUNIT','Jy', 'Specific intensity (per spaxel)'
+  modfits,directory+file+'_SIGMA.fits',0,h_temp
+  modfits,directory+file+'_SIGMA.fits',1,h2,extname='SIGMA'
+endif
 
 
 
-;mkhdr, hdr,var,/IMAGE
-;sxaddhist,"Variance image",hdr,/COMMENT
-mwrfits,0,directory+file+'_counts.fits',h
-;mkhdr, hdr,badpix,/image
-;sxaddhist,"Bad pixel mask",hdr,/COMMENT
-;mwrfits,badpix,'/home/ejohnsto/NGC3311/data/NGC3311.fits',hdr
 
+;badpix=fltarr(x,y,z)
+if keyword_set(BADPIX) then begin
+  if keyword_set(MANGA) then begin
+    print,'creating bad pixel mask'
+    badpix=MRDFITS(directory+file+'.fits', 3, hdr3)
+    sxaddpar,hdr3,'EXTNAME','BADPIX'
+    fits_write,directory+file+'_BADPIX.fits',badpix,extname='BADPIX'
+    ;mwrfits,0,directory+file+'_BADPIX.fits',hdr3
+    temp=mrdfits(directory+file+'.fits',0,h_temp)
+    modfits,directory+file+'_BADPIX.fits',0,h_temp
+    modfits,directory+file+'_BADPIX.fits',1,hdr3,extname='BADPIX'
+  endif else begin
+    ;where no bad pixel data cube provided, create one by 
+    ;identifying 0-value or NAN pixels
+    index = WHERE(output EQ 0 or finite(output) eq 0)
+    s = SIZE(output)
+    ncol = s[1]
+    nrow = s[2]
+    col = index mod ncol
+    row = (index / ncol) mod nrow
+    frame = index / (nrow*ncol)
+    badpix=fltarr(s[1],s[2],s[3])
+    badpix[*,*,*]=0
+    badpix[col,row,frame]=1
+    sxaddpar,hdr3,'EXTNAME','BADPIX'
+    fits_write,directory+file+'_BADPIX.fits',badpix,extname='BADPIX'
+    modfits,directory+file+'_BADPIX.fits',0,h_temp
+    modfits,directory+file+'_BADPIX.fits',0,h,extname='BADPIX'
+  endif
+endif
+
+
+print,'#############################'
+if keyword_set(MANGA) then begin
+  print,'## CRVAL3='+string(wavelength[0])+' ##'
+  print,'## CDELT3='+string(wavelength[1]-wavelength[0])+' ##'
+endif
+if keyword_set(MUSE) then begin
+  print,'## CRVAL3='+string(LogLam2[0])+' ##'
+  print,'## CDELT3='+string(LogLam2[1]-LogLam2[0])+' ##'
+endif
+print,'#############################'
+
+if keyword_set(MANGA) then MaNGA_PSF_datacube,input_file
+stop
 end
