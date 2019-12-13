@@ -143,7 +143,7 @@ print,'D00) wavelength start= '+string(logLam2[0])
 print,'D01) wavelength step=  '+string(logLam2[1]-logLam2[0])
 
 
-fits_write,directory+file+'_FLUX_GOOD.fits',output,h;,extname='FLUX'
+fits_write,directory+file+'_FLUX.fits',output,h;,extname='FLUX'
 stop
 if same_dir eq 'y' then temp=mrdfits(directory+file+'.fits',0,h_temp)
 ;;if same_dir eq 'n' then h_temp=headfits(file_temp,exten=0)
